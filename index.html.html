@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LEAD BREAKFAST: FUSION LINK</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --neon-blue: #00f3ff;
+            --neon-purple: #bc13fe;
+            --neon-red: #ff0055;
+            --neon-gold: #ffd700;
+            --neon-fuel: #ffaa00;
+            --bg-color: #0d1117;
+            --armor-main: #4b6b44;
+            --armor-dark: #2a3b2a;
+            --visor: #ffae00;
+        }
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--bg-color);
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            user-select: none;
+            cursor: none;
+            touch-action: none;
+        }
+        canvas { display: block; image-rendering: pixelated; }
+
+        .scanlines {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(to bottom, rgba(0,0,0,0) 50%, rgba(0,0,0,0.2) 50%), linear-gradient(90deg, rgba(255,0,0,0.03), rgba(0,255,0,0.01), rgba(0,0,255,0.03));
+            background-size: 100% 4px, 4px 100%; pointer-events: none; z-index: 50;
+        }
+
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; z-index: 10; }
+        .hud-corner { position: absolute; padding: 20px; }
+        .top-left { top: 20px; left: 20px; }
+        .top-right { top: 20px; right: 20px; text-align: right; }
+        .bottom-left { bottom: 20px; left: 20px; }
+        
+        .bar-container { display: flex; align-items: center; margin-bottom: 5px; }
+        .bar-label { font-weight: 900; color: #8fbc8f; width: 60px; font-size: 14px; text-shadow: 1px 1px 0 #000; }
+        .bar-frame { width: 250px; height: 16px; background: #111; border: 2px solid #333; position: relative; }
+        .bar-fill { height: 100%; transition: width 0.1s linear; }
+        
+        #shield-bar { background: var(--neon-blue); box-shadow: 0 0 5px var(--neon-blue); }
+        #health-bar { background: var(--neon-red); box-shadow: 0 0 5px var(--neon-red); }
+        #fuel-bar { background: var(--neon-fuel); box-shadow: 0 0 5px var(--neon-fuel); }
+
+        #weapon-card {
+            font-size: 28px; font-weight: 900; color: var(--neon-gold);
+            text-transform: uppercase; letter-spacing: 2px;
+            border-left: 5px solid var(--neon-gold); padding-left: 10px;
+            background: rgba(0,0,0,0.6);
+        }
+        
+        .ability-status { margin-top: 5px; font-size: 14px; color: #aaa; font-weight: bold; font-family: monospace; }
+        
+        #mech-hud { display: none; margin-top: 10px; border-top: 2px solid #444; padding-top: 10px; }
+        .mech-skill { color: #888; font-size: 14px; margin-bottom: 4px; text-shadow: 1px 1px 0 #000; }
+        .ready { color: var(--neon-gold); animation: pulseText 1s infinite; }
+        @keyframes pulseText { 0%{opacity:1;} 50%{opacity:0.7;} 100%{opacity:1;} }
+
+        #god-menu {
+            position: absolute; right: 20px; bottom: 100px; text-align: right;
+            display: none; color: var(--neon-gold); font-size: 14px; line-height: 1.4;
+            text-shadow: 1px 1px 0 #000; background: rgba(0,0,0,0.8); padding: 10px;
+            border: 1px solid var(--neon-gold); font-family: monospace;
+        }
+        #cheat-msg {
+            position: absolute; top: 20%; left: 50%; transform: translateX(-50%);
+            font-size: 50px; color: var(--neon-gold); font-weight: 900;
+            text-shadow: 4px 4px 0 #000; display: none; z-index: 200;
+            animation: pulse 0.5s infinite alternate; white-space: nowrap;
+        }
+        @keyframes pulse { from{scale:1;} to{scale:1.1;} }
+
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 12, 10, 0.95);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 100;
+        }
+        
+        .btn-start, .btn-mp {
+            padding: 15px 50px; font-size: 20px; margin-top: 15px; width: 320px;
+            background: var(--armor-main); color: #fff; border: 2px solid #fff;
+            font-family: 'Courier New', monospace; font-weight: bold; cursor: pointer;
+            text-align: center; text-transform: uppercase;
+        }
+        .btn-start:hover, .btn-mp:hover { background: #fff; color: #000; }
+        .btn-mp { background: #550000; border-color: #ff5555; }
+        
+        #mp-menu { display: none; }
+        input[type="text"] {
+            padding: 10px; font-size: 16px; width: 300px; margin-top: 10px;
+            background: #000; color: var(--neon-blue); border: 1px solid var(--neon-blue);
+            font-family: 'Courier New', monospace; text-align: center;
+        }
+
+        #boss-hud {
+            position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+            width: 600px; display: none; text-align: center;
+        }
+        #boss-hp-fill { height: 20px; background: red; width: 100%; border: 2px solid #500; }
+
+        /* CONTROLES MOBILE */
+        #mobile-controls {
+            display: none;
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 90;
+        }
+        .mob-btn {
+            position: absolute; pointer-events: auto;
+            background: rgba(0, 243, 255, 0.1);
+            border: 2px solid var(--neon-blue);
+            border-radius: 50%; width: 60px; height: 60px;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-weight: bold; font-size: 20px;
+            backdrop-filter: blur(2px); box-shadow: 0 0 10px rgba(0,243,255,0.2);
+            user-select: none; -webkit-user-select: none;
+        }
+        .mob-btn:active { background: var(--neon-blue); color: #000; }
+        
+        #mb-left { bottom: 30px; left: 20px; }
+        #mb-right { bottom: 30px; left: 100px; }
+        #mb-down { bottom: 20px; left: 180px; width: 40px; height: 40px; font-size: 12px; border-color: red; }
+        #mb-fire { bottom: 60px; right: 30px; width: 80px; height: 80px; border-color: red; background: rgba(255,0,0,0.1); }
+        #mb-jump { bottom: 30px; right: 130px; width: 70px; height: 70px; border-color: #0f0; background: rgba(0,255,0,0.1); }
+        #mb-skill-q { bottom: 150px; right: 30px; width: 50px; height: 50px; border-color: var(--neon-gold); font-size: 12px; }
+        #mb-skill-e { bottom: 150px; right: 90px; width: 50px; height: 50px; border-color: var(--neon-purple); font-size: 12px; }
+        #mb-drone { bottom: 150px; right: 150px; width: 50px; height: 50px; border-color: white; font-size: 12px; }
+
+        @media (pointer: coarse) {
+            #mobile-controls { display: block; }
+            #hud .bottom-left { bottom: 150px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="scanlines"></div>
+
+<div id="mobile-controls">
+    <div id="mb-left" class="mob-btn">◄</div>
+    <div id="mb-right" class="mob-btn">►</div>
+    <div id="mb-down" class="mob-btn">▼</div>
+    <div id="mb-fire" class="mob-btn">FIRE</div>
+    <div id="mb-jump" class="mob-btn">JUMP</div>
+    <div id="mb-skill-q" class="mob-btn">Q</div>
+    <div id="mb-skill-e" class="mob-btn">E</div>
+    <div id="mb-drone" class="mob-btn">DRN</div>
+</div>
+
+<div id="start-screen" class="overlay">
+    <h1 style="color:var(--neon-blue); font-size:50px; text-shadow:4px 4px 0 #000; text-align:center;">LEAD BREAKFAST</h1>
+    <h3 style="color:#aaa; letter-spacing:5px; text-align:center;">CO-OP FUSION</h3>
+    <button class="btn-start" onclick="initGame()">SINGLEPLAYER</button>
+    <button class="btn-mp" style="background:#004455; border-color:#00ffff;" onclick="startLocalCoop()">LOCAL CO-OP (2P)</button>
+    <button class="btn-mp" onclick="openMpMenu()">MULTIPLAYER (ONLINE)</button>
+    <p style="color:#555; margin-top:10px; font-size:12px;">P1: WASD+MOUSE | P2: SETAS+NUM0</p>
+</div>
+
+<div id="mp-menu" class="overlay">
+    <h1 style="color:var(--neon-gold);">SALA DE FUSÃO</h1>
+    <p style="color:#aaa; max-width:400px; text-align:center;">P1 (HOST) = PILOTO (WASD)<br>P2 (CLIENT) = ARTILHEIRO (MOUSE)</p>
+    
+    <div id="host-section">
+        <button class="btn-mp" onclick="startHost()">SER HOST (PILOTO)</button>
+        <div id="host-id-display" style="color:var(--neon-blue); margin:10px; font-size:20px; user-select:text;"></div>
+    </div>
+    
+    <div id="client-section" style="margin-top:20px; border-top:1px solid #444; padding-top:20px;">
+        <input type="text" id="room-id-input" placeholder="COLAR ID AQUI">
+        <button class="btn-mp" onclick="joinRoom()">ENTRAR (ARTILHEIRO)</button>
+    </div>
+    
+    <div id="mp-status" style="color:yellow; margin-top:20px;"></div>
+    <button class="btn-mp" style="margin-top:30px; border-color:#555; background:#111;" onclick="location.reload()">VOLTAR</button>
+</div>
+
+<div id="game-over" class="overlay" style="display: none;">
+    <h1 style="color: red; font-size: 60px;">K.I.A.</h1>
+    <p id="final-score" style="color: white; font-size: 20px;">0m | 0 KILLS</p>
+    <button class="btn-start" onclick="location.reload()">MENU</button>
+</div>
+
+<div id="boss-hud">
+    <h2 id="boss-name" style="color:red; margin:0; text-shadow:2px 2px 0 #000;">BOSS</h2>
+    <div style="background:#222; padding:2px;"><div id="boss-hp-fill"></div></div>
+</div>
+
+<div id="cheat-msg"></div>
+
+<div id="hud">
+    <div class="hud-corner top-left">
+        <div class="bar-container"><span class="bar-label">ESCUDO</span><div class="bar-frame"><div id="shield-bar" class="bar-fill" style="width: 100%;"></div></div></div>
+        <div class="bar-container"><span class="bar-label">BLIND.</span><div class="bar-frame"><div id="health-bar" class="bar-fill" style="width: 100%;"></div></div></div>
+        <div class="bar-container"><span class="bar-label" style="color: var(--neon-fuel);">FUEL</span><div class="bar-frame"><div id="fuel-bar" class="bar-fill" style="width: 100%;"></div></div></div>
+        <div id="human-ui"><div id="drone-status" class="ability-status">[SHIFT/TRI] DRONE: CARREGANDO</div></div>
+        <div id="mech-hud">
+            <div id="ui-missile" class="mech-skill">[Q/QUAD] MÍSSEIS PREDADOR</div>
+            <div id="ui-flame" class="mech-skill">[E/CIRC] INCINERADOR</div>
+            <div id="ui-slam" class="mech-skill" style="color:#fff;">[AR + S] TITAN SLAM</div>
+        </div>
+        <div id="god-status" class="ability-status" style="display:none; color:gold;">[GOD MODE] ATIVO</div>
+        <div id="mp-info" class="ability-status" style="color:var(--neon-blue); display:none;">PLAYER 1</div>
+        <div id="p2-info" class="ability-status" style="color:var(--neon-purple); display:none;">PLAYER 2 ACTIVE</div>
+    </div>
+    <div class="hud-corner bottom-left">
+        <div id="weapon-card">RIFLE</div>
+        <div style="color:#aaa; font-size:12px; margin-top:5px;">MUNIÇÃO INFINITA</div>
+    </div>
+    <div id="god-menu">COMANDOS DIVINOS:<br>[1-9] PODERES</div>
+    <div class="hud-corner top-right">
+        <div id="score-display" style="font-size: 32px; color: white;">0m</div>
+        <div id="kills-display" style="color: #ff5555;">KILLS: 0</div>
+    </div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+// --- MULTIPLAYER GLOBALS ---
+let peer = null;
+let conn = null;
+let isMultiplayer = false;
+let isHost = false;
+let p2Input = { mouse:{x:0, y:0, down:false, worldX:0, worldY:0} };
+let clientGameStarted = false;
+
+// --- LOCAL COOP GLOBALS ---
+let isLocalCoop = false;
+let player2 = null;
+let keysP2 = { w:false, a:false, s:false, d:false, space:false, shift:false, q:false, e:false };
+let mouseP2 = { x:0, y:0, down:false, worldX:0, worldY:0, isVirtual: true };
+
+function openMpMenu() {
+    document.getElementById('start-screen').style.display = 'none';
+    document.getElementById('mp-menu').style.display = 'flex';
+}
+
+function startHost() {
+    const status = document.getElementById('mp-status');
+    status.innerText = "CRIANDO SALA...";
+    peer = new Peer();
+    peer.on('open', (id) => {
+        document.getElementById('host-id-display').innerText = "ID: " + id;
+        status.innerText = "AGUARDANDO O ARTILHEIRO (P2)...";
+        isHost = true;
+        isMultiplayer = true;
+    });
+    peer.on('connection', (c) => {
+        conn = c;
+        setupConnection();
+        status.innerText = "ARTILHEIRO CONECTADO! SINCRONIZANDO...";
+        setTimeout(initGame, 1000);
+    });
+}
+
+function joinRoom() {
+    const id = document.getElementById('room-id-input').value;
+    if(!id) return alert("DIGITE O ID!");
+    const status = document.getElementById('mp-status');
+    status.innerText = "CONECTANDO AO PILOTO...";
+    peer = new Peer();
+    peer.on('open', () => {
+        conn = peer.connect(id);
+        conn.on('open', () => {
+            status.innerText = "CONECTADO! ASSUMINDO ARMAS...";
+            isHost = false;
+            isMultiplayer = true;
+            setupConnection();
+        });
+    });
+}
+
+function setupConnection() {
+    conn.on('data', (data) => {
+        if(isHost) {
+            if(data.input && data.input.mouse) {
+                p2Input.mouse = data.input.mouse;
+            }
+        } else {
+            if(data.state) renderClient(data.state);
+        }
+    });
+}
+
+// --- ENGINE BASE ---
+const COLORS = {
+    bg: '#0d1117', // CORREÇÃO TELA ROXA
+    neonBlue: '#00f3ff', neonPurple: '#bc13fe', neonRed: '#ff0055', neonGold: '#ffd700', neonFuel: '#ffaa00',
+    armorDark: '#2a3b2a', armorMain: '#4b6b44', visor: '#ffae00'
+};
+
+const BOSS_DATA = [
+    { name: "MECHA-LORD", hp: 3000, color: '#ff0000', type: 0 },
+    { name: "THE BUTCHER", hp: 5000, color: '#880000', type: 1 }, 
+    { name: "VOID EYE", hp: 2500, color: '#bc13fe', type: 2 }, 
+    { name: "SKY FORTRESS", hp: 4000, color: '#ffd700', type: 3 }
+];
+
+const AudioSys = {
+    ctx: null,
+    init: function() { window.AudioContext = window.AudioContext||window.webkitAudioContext; this.ctx = new AudioContext(); },
+    play: function(freq, type, dur, vol=0.1) {
+        if(!this.ctx) return;
+        const o=this.ctx.createOscillator(); const g=this.ctx.createGain();
+        o.type=type; o.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        g.gain.setValueAtTime(vol, this.ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime+dur);
+        o.connect(g); g.connect(this.ctx.destination); o.start(); o.stop(this.ctx.currentTime+dur);
+    },
+    shoot: function(name) {
+        if(name.includes('KATANA')) this.play(300, 'triangle', 0.1, 0.2);
+        else if(name.includes('BAZOOKA')) this.play(60, 'square', 0.8, 0.5);
+        else this.play(150+Math.random()*50, 'sawtooth', 0.1, 0.1);
+    },
+    god: function() { this.play(800, 'sine', 1.0, 0.3); },
+    jetpack: function() { this.play(50, 'sawtooth', 0.1, 0.05); }, 
+    explode: function() { this.play(50, 'sawtooth', 0.5, 0.5); },
+    mechStep: function() { this.play(40, 'square', 0.1, 0.2); },
+    mechSlam: function() { this.play(20, 'sawtooth', 1.0, 0.8); }
+};
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false; 
+
+let width, height;
+function resize() { width=canvas.width=window.innerWidth; height=canvas.height=window.innerHeight; ctx.imageSmoothingEnabled = false; }
+window.addEventListener('resize', resize); resize();
+
+let stars = [];
+function initStars() { stars = []; for(let i=0; i<150; i++) stars.push({x:Math.random()*width, y:Math.random()*height, s:Math.random()*3, v:Math.random()*0.5+0.1}); }
+
+// --- INPUTS ---
+const keys = { w:false, a:false, s:false, d:false, space:false, shift:false, q:false, e:false };
+const mouse = { x:width/2, y:height/2, down:false, worldX:0, worldY:0 };
+let cam = { x:0, y:0, shake:0 };
+let inputHistory = [];
+const mechCode = ['ArrowLeft', 'ArrowLeft', 'ArrowRight', 'ArrowRight', 'b', 'a'];
+
+// --- SUPORTE GAMEPAD ---
+function updateGamepad() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    if(!pads) return;
+
+    // --- GAMEPAD 1 (P1) ---
+    if(pads[0]) {
+        const gp = pads[0];
+        const dz = 0.2;
+        let lx = gp.axes[0]; let ly = gp.axes[1];
+        keys.d = lx > dz; keys.a = lx < -dz;
+        keys.s = ly > dz; 
+        keys.space = gp.buttons[0].pressed; // A / Cross
+        keys.q = gp.buttons[2].pressed; // X / Square
+        keys.e = gp.buttons[1].pressed; // B / Circle
+        keys.shift = gp.buttons[3].pressed; // Y / Triangle
+        mouse.down = (gp.buttons[7] && gp.buttons[7].pressed) || (gp.buttons[5] && gp.buttons[5].pressed); // RT/RB
+        let rx = gp.axes[2]; let ry = gp.axes[3];
+        if(Math.abs(rx) > dz || Math.abs(ry) > dz) {
+            mouse.x += rx * 15; mouse.y += ry * 15;
+            mouse.x = Math.max(0, Math.min(width, mouse.x));
+            mouse.y = Math.max(0, Math.min(height, mouse.y));
+            mouse.worldX = mouse.x + cam.x;
+            mouse.worldY = mouse.y + cam.y;
+        }
+    }
+
+    // --- GAMEPAD 2 (P2 - LOCAL COOP) ---
+    if(isLocalCoop && pads[1]) {
+        const gp = pads[1];
+        const dz = 0.2;
+        let lx = gp.axes[0]; let ly = gp.axes[1];
+        keysP2.d = lx > dz; keysP2.a = lx < -dz;
+        keysP2.s = ly > dz; 
+        keysP2.space = gp.buttons[0].pressed; 
+        keysP2.q = gp.buttons[2].pressed; 
+        keysP2.e = gp.buttons[1].pressed; 
+        keysP2.shift = gp.buttons[3].pressed; 
+        mouseP2.down = (gp.buttons[7] && gp.buttons[7].pressed) || (gp.buttons[5] && gp.buttons[5].pressed);
+        
+        // Aiming Logic for P2
+        let rx = gp.axes[2]; let ry = gp.axes[3];
+        mouseP2.isVirtual = false;
+        if(Math.abs(rx) > dz || Math.abs(ry) > dz) {
+            if(player2) {
+                 // Convert stick direction to world pos relative to P2
+                 mouseP2.worldX = (player2.x + player2.w/2) + rx * 200;
+                 mouseP2.worldY = (player2.y + player2.h/2) + ry * 200;
+            }
+        } else if(player2) {
+            // Default to aim forward if no stick input
+            mouseP2.worldX = (player2.x + player2.w/2) + (player2.facing * 100);
+            mouseP2.worldY = (player2.y + player2.h/2);
+        }
+    } else if(isLocalCoop && player2) {
+        // --- KEYBOARD AIM FOR P2 (ARROWS) ---
+        // If P2 is on Keyboard (Arrows), aim follows movement direction or fixed forward
+        let aimDir = player2.facing;
+        mouseP2.worldX = (player2.x + player2.w/2) + (aimDir * 200);
+        mouseP2.worldY = (player2.y + player2.h/2);
+        mouseP2.isVirtual = true;
+    }
+}
+
+function setupMobileControls() {
+    const bindBtn = (id, key) => {
+        const btn = document.getElementById(id);
+        btn.addEventListener('touchstart', (e) => { e.preventDefault(); if(key==='fire') mouse.down=true; else keys[key] = true; });
+        btn.addEventListener('touchend', (e) => { e.preventDefault(); if(key==='fire') mouse.down=false; else keys[key] = false; });
+    };
+    bindBtn('mb-left', 'a'); bindBtn('mb-right', 'd'); bindBtn('mb-down', 's');
+    bindBtn('mb-jump', 'space'); bindBtn('mb-skill-q', 'q');
+    bindBtn('mb-skill-e', 'e'); bindBtn('mb-drone', 'shift'); bindBtn('mb-fire', 'fire');
+}
+setupMobileControls();
+
+window.addEventListener('keydown', e => {
+    let k = e.key.toLowerCase();
+    inputHistory.push(e.key); if(inputHistory.length > 10) inputHistory.shift();
+    let mechSlice = inputHistory.slice(-6);
+    let isMechMatch = true; for(let i=0; i<6; i++) { if(mechSlice[i] !== mechCode[i]) isMechMatch = false; }
+    if(isMechMatch && player && !player.isMech && !player.isGodMode) player.transformToMech();
+    
+    // --- INPUT SPLITTER ---
+    if(isLocalCoop) {
+        // P1 Controls (WASD Only + Mouse)
+        if(k==='w') keys.space = true;
+        if(k==='a') keys.a = true; 
+        if(k==='s') keys.s = true; 
+        if(k==='d') keys.d = true;
+        if(k===' ') keys.space = true; // Space for P1
+        if(e.key === 'Shift') keys.shift = true;
+        if(k === 'q') keys.q = true; if(k === 'e') keys.e = true;
+
+        // P2 Controls (Arrows + Numpad0/Ctrl)
+        if(e.key==='ArrowUp') keysP2.space = true;
+        if(e.key==='ArrowLeft') keysP2.a = true; 
+        if(e.key==='ArrowDown') keysP2.s = true; 
+        if(e.key==='ArrowRight') keysP2.d = true;
+        if(e.key==='0' || e.key==='Control' || e.key==='Enter') mouseP2.down = true;
+        
+        // Weapon Switch P2
+        if(player2 && e.key >= '1' && e.key <= '7' && e.location === 3) { // Numpad
+            player2.equip(parseInt(e.key)-1);
+        }
+
+    } else {
+        // Default Single Player (Arrows map to P1)
+        let godSlice = inputHistory.slice(-2);
+        if(godSlice.length === 2 && godSlice[0] === 'ArrowUp' && godSlice[1] === 'ArrowDown') { if(player) player.toggleGodMode(); }
+        if(player && player.isGodMode && e.key >= '0' && e.key <= '9') player.useGodPower(e.key);
+        else if(player && !player.isGodMode && e.key>='1' && e.key<='7') player.equip(parseInt(e.key)-1);
+        
+        if(k==='w'||k===' '||e.key==='ArrowUp') keys.space = true;
+        if(k==='a'||e.key==='ArrowLeft') keys.a = true; 
+        if(k==='s'||e.key==='ArrowDown') keys.s = true; 
+        if(k==='d'||e.key==='ArrowRight') keys.d = true;
+        if(e.key === 'Shift') keys.shift = true;
+        if(k === 'q') keys.q = true; if(k === 'e') keys.e = true;
+    }
+
+    if(k==='r' && player) player.revert();
+});
+
+window.addEventListener('keyup', e => {
+    let k = e.key.toLowerCase();
+    
+    if(isLocalCoop) {
+        // P1
+        if(k==='w'||k===' ') { keys.space = false; if(player) player.canJump = true; }
+        if(k==='a') keys.a = false; 
+        if(k==='s') keys.s = false; 
+        if(k==='d') keys.d = false;
+        if(e.key === 'Shift') keys.shift = false;
+        if(k === 'q') keys.q = false; if(k === 'e') keys.e = false;
+
+        // P2
+        if(e.key==='ArrowUp') { keysP2.space = false; if(player2) player2.canJump = true; }
+        if(e.key==='ArrowLeft') keysP2.a = false; 
+        if(e.key==='ArrowDown') keysP2.s = false; 
+        if(e.key==='ArrowRight') keysP2.d = false;
+        if(e.key==='0' || e.key==='Control' || e.key==='Enter') mouseP2.down = false;
+
+    } else {
+        if(k==='w'||k===' '||e.key==='ArrowUp') { keys.space = false; if(player) player.canJump = true; }
+        if(k==='a'||e.key==='ArrowLeft') keys.a = false; 
+        if(k==='s'||e.key==='ArrowDown') keys.s = false; 
+        if(k==='d'||e.key==='ArrowRight') keys.d = false;
+        if(e.key === 'Shift') keys.shift = false;
+        if(k === 'q') keys.q = false; if(k === 'e') keys.e = false;
+    }
+});
+
+window.addEventListener('mousedown', () => mouse.down = true);
+window.addEventListener('mouseup', () => mouse.down = false);
+window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.worldX = mouse.x + cam.x; mouse.worldY = mouse.y + cam.y; });
+window.addEventListener('touchmove', e => { 
+    if(e.touches.length > 0) {
+        let t = e.touches[0];
+        if(t.target.tagName === 'CANVAS') {
+             mouse.x = t.clientX; mouse.y = t.clientY; mouse.worldX = mouse.x + cam.x; mouse.worldY = mouse.y + cam.y;
+        }
+    }
+});
+
+let player;
+let entities = [], enemies = [], platforms = [], friendlyDrones = [];
+let gameState = 'menu', score = 0, kills = 0, timer = 0, timeStop = false;
+let nextChunkX = 0, bossActive = false, distanceToBoss = 500; 
+
+const WEAPONS = [
+    { name: "RIFLE", type: 'auto', rate: 6, dmg: 10, speed: 20, spread: 0.05, color: '#ffea00' },
+    { name: "MAGNUM", type: 'semi', rate: 20, dmg: 45, speed: 28, spread: 0.02, color: '#fff' },
+    { name: "SHOTGUN", type: 'semi', rate: 50, dmg: 8, speed: 18, spread: 0.3, count: 6, color: '#ff8800' },
+    { name: "SNIPER", type: 'semi', rate: 70, dmg: 140, speed: 50, spread: 0, pierce: true, color: '#00eaff' },
+    { name: "BAZOOKA", type: 'semi', rate: 90, dmg: 180, speed: 14, spread: 0, blast: 140, color: '#00ff00' },
+    { name: "RAILGUN", type: 'semi', rate: 100, dmg: 400, speed: 80, spread: 0, pierce: true, color: '#ff00ff' },
+    { name: "KATANA", type: 'melee', rate: 25, dmg: 100, range: 100, color: '#bc13fe' }
+];
+
+class Player {
+    constructor(xOffset = 0) {
+        this.w=40; this.h=64; this.x=100 + xOffset; this.y=height-300;
+        this.vx=0; this.vy=0;
+        this.hp=100; this.maxHp=100; this.shield=100; this.maxShield=100;
+        this.fuel=100; this.maxFuel=100; 
+        this.grounded=false; this.canJump=true;
+        this.wIdx=0; this.fireCd=0; this.droneCd=0;
+        this.facing = 1; this.animTimer = 0;
+        this.isGodMode = false; this.isMech = false;
+        this.missileCd = 0; this.flameCd = 0; this.isSlamming = false;
+        this.customColor = xOffset > 0 ? COLORS.neonPurple : COLORS.armorMain;
+        this.id = xOffset > 0 ? 2 : 1;
+    }
+
+    toggleGodMode() {
+        this.revert(); this.isGodMode = !this.isGodMode;
+        if(this.isGodMode) {
+            AudioSys.god(); this.hp = 9999; this.shield = 9999; this.fuel = 9999;
+            showMsg("✨ GOD MODE ✨"); document.getElementById('god-status').style.display='block';
+        } else {
+            document.getElementById('god-status').style.display='none';
+        }
+    }
+
+    transformToMech() {
+        this.revert(); this.isMech = true; this.w = 70; this.h = 90; this.y -= 30;
+        this.maxHp = 5000; this.hp = 5000; this.maxShield = 5000; this.shield = 5000; this.maxFuel = 300; this.fuel = 300; 
+        showMsg("🤖 MECHA ONLINE 🤖"); 
+        if(this.id===1) document.getElementById('mech-hud').style.display='block'; 
+        if(this.id===1) document.getElementById('human-ui').style.display='none';
+        spawnParticles(this.x+30, this.y+50, 50, COLORS.neonGold);
+    }
+
+    revert() {
+        this.isMech = false; this.isGodMode = false; timeStop = false; this.isSlamming = false;
+        this.w = 40; this.h = 64; this.maxHp = 100; this.hp = 100; this.maxShield = 100; this.shield = 100; this.maxFuel = 100; this.fuel = 100;
+        if(this.id===1) {
+            document.getElementById('mech-hud').style.display='none'; document.getElementById('human-ui').style.display='block'; document.getElementById('god-status').style.display='none';
+        }
+    }
+
+    useGodPower(key) {
+        AudioSys.god();
+        switch(key) {
+            case '1': this.x = mouse.worldX; this.y = mouse.worldY; break; 
+            case '2': entities.push({type:'lightning', x:mouse.worldX, y:0, targetY:mouse.worldY+50, life:20}); break; 
+            case '3': entities.push({type:'blackhole', x:mouse.worldX, y:mouse.worldY, life:300}); break;
+            case '4': timeStop = !timeStop; showMsg(timeStop ? "TEMPO PARADO" : "TEMPO RESUMIDO"); break;
+            case '5': cam.shake = 50; enemies.forEach(e => e.hit(9999)); spawnParticles(cam.x+width/2, cam.y+height/2, 100, '#fff'); break; 
+            case '6': for(let i=0;i<5;i++) friendlyDrones.push(new FriendlyDrone(this.x, this.y-50)); break;
+        }
+    }
+
+    equip(i) { 
+        if(i>=0 && i<WEAPONS.length) { 
+            this.wIdx=i; 
+            if(this.id===1) {
+                document.getElementById('weapon-card').innerText=WEAPONS[i].name; 
+                document.getElementById('weapon-card').style.color=WEAPONS[i].color;
+            }
+        } 
+    }
+    
+    update(inputSource, mouseSource) {
+        if (this.hp <= 0) return; // Dead players don't update
+
+        // --- SISTEMA HÍBRIDO DE CONTROLE ---
+        const K = inputSource;   // Teclado (Local)
+        const M = mouseSource;   // Mouse (Remoto se MP)
+
+        if(this.isMech && this.id === 1) {
+            let mUi = document.getElementById('ui-missile'); let fUi = document.getElementById('ui-flame');
+            mUi.className = this.missileCd<=0?'mech-skill ready':'mech-skill'; mUi.innerText=this.missileCd<=0?'[Q] MÍSSEIS: PRONTO':`[Q] ${Math.ceil(this.missileCd/60)}`;
+            fUi.className = this.flameCd<=0?'mech-skill ready':'mech-skill'; fUi.innerText=this.flameCd<=0?'[E] FIRE: PRONTO':`[E] ${Math.ceil(this.flameCd/60)}`;
+            if(this.missileCd>0)this.missileCd--; if(this.flameCd>0)this.flameCd--;
+        }
+
+        if(this.isGodMode) {
+            let spd = 15;
+            if(K.a) { this.x -= spd; this.facing = -1; }
+            if(K.d) { this.x += spd; this.facing = 1; }
+            if(K.w || K.space) this.y -= spd;
+            if(K.s) this.y += spd;
+            this.hp=9999; this.shield=9999; this.fuel=9999;
+            if(M.down && this.fireCd<=0) this.shoot(M);
+            return;
+        }
+
+        let acc = this.grounded ? 1.5 : 0.8;
+        
+        if(this.isMech && !this.grounded && K.s && K.space && !this.isSlamming) {
+            this.isSlamming = true; this.vx = 0; this.vy = 25; 
+        }
+
+        if(!this.isSlamming) {
+            if(K.a) { this.vx -= acc; this.facing = -1; }
+            if(K.d) { this.vx += acc; this.facing = 1; }
+            this.vx *= 0.85; this.vy += 0.6;
+        }
+
+        if(K.space && !this.isSlamming) {
+            if(this.grounded && this.canJump) { this.vy = this.isMech ? -15 : -12; this.grounded = false; this.canJump = false; } 
+            else if (!this.grounded && this.fuel > 0) {
+                this.vy -= this.isMech ? 1.2 : 1.0; if(this.vy < -12) this.vy = -12;
+                this.fuel -= this.isMech ? 3 : 1.5; 
+                if(timer % 3 === 0) { AudioSys.jetpack(); spawnParticles(this.x+(this.facing===1?10:this.w-10), this.y+this.h-20, 2, '#ffaa00'); }
+            }
+        }
+        if(this.grounded && this.fuel < this.maxFuel) this.fuel += 2;
+
+        if(this.isMech) {
+            if(K.q && this.missileCd <= 0) { this.missileCd = 180; for(let i=0;i<6;i++) entities.push(new HomingMissile(this.x+30, this.y, -1.5+(i*0.5))); }
+            if(K.e && this.flameCd <= 0) {
+                let fireX = this.x + (this.facing===1 ? 70 : 0); let fireY = this.y + 45;
+                let aimAngle = Math.atan2(M.worldY - fireY, M.worldX - fireX);
+                for(let i=0; i<3; i++) {
+                    let fa = aimAngle + (Math.random()-0.5)*0.5; 
+                    entities.push({ type: 'flame', x: fireX, y: fireY, vx: Math.cos(fa)*18, vy: Math.sin(fa)*18, life: 25 });
+                }
+                this.fuel = Math.max(0, this.fuel-1); if(!K.e) this.flameCd = 10; 
+            }
+        } else {
+            if(this.droneCd > 0) this.droneCd--;
+            if(this.id === 1) document.getElementById('drone-status').innerText = this.droneCd>0 ? `RECARREGANDO (${Math.ceil(this.droneCd/60)})` : `[SHIFT/TRI] DRONE PRONTO`;
+            if(K.shift && this.droneCd <= 0) { friendlyDrones.push(new FriendlyDrone(this.x, this.y-50)); this.droneCd = 600; }
+        }
+
+        this.x += this.vx; this.y += this.vy; this.grounded = false;
+        
+        platforms.forEach(p => {
+            if(this.vy>=0 && this.y+this.h<=p.y+p.h+30 && this.y+this.h>=p.y-10 && this.x+this.w>p.x && this.x<p.x+p.w) {
+                if(!K.s || this.isSlamming) { 
+                    if(this.isSlamming) {
+                        this.isSlamming = false; cam.shake = 30; AudioSys.mechSlam();
+                        spawnParticles(this.x+this.w/2, this.y+this.h, 50, '#fff');
+                        entities.push({type:'shockwave', x:this.x+this.w/2, y:this.y+this.h, radius:10, maxRadius:250});
+                        enemies.forEach(e => { if(Math.hypot(e.x - this.x, e.y - this.y) < 300) { e.hit(200); e.vy = -20; } });
+                    }
+                    this.y=p.y-this.h; this.vy=0; this.grounded=true; this.canJump=true; 
+                }
+            }
+        });
+
+        if(this.y > height + 200) this.hp = 0; 
+        if(this.shield<this.maxShield && timer%60==0) this.shield+=2;
+        if(this.fireCd>0) this.fireCd--;
+        if(M.down && this.fireCd<=0) this.shoot(M);
+    }
+
+    shoot(M) {
+        const w = WEAPONS[this.wIdx]; this.fireCd = w.rate;
+        let cx, cy;
+        if(this.isMech) { cx = this.x + (this.facing===1?70:0); cy = this.y + 40; }
+        else { cx = this.x + (this.facing===1?40:0); cy = this.y + 28; }
+        
+        let aimAngle;
+        // P2 (Keyboard) specific aiming logic if virtual
+        if(M.isVirtual) {
+            // Straight line shooting
+            aimAngle = (this.facing === 1) ? 0 : Math.PI; 
+        } else {
+            aimAngle = Math.atan2(M.worldY - cy, M.worldX - cx);
+        }
+
+        cam.shake = this.isMech ? 5 : 3; 
+        AudioSys.shoot(w.name);
+        spawnParticles(cx + Math.cos(aimAngle)*20, cy + Math.sin(aimAngle)*20, 5, w.color);
+        if(w.type==='melee') {
+            entities.push({type:'slash', x:cx, y:cy, ang:aimAngle, life:10, color:w.color, range:w.range*(this.isMech?1.5:1)});
+            enemies.forEach(e => { if(Math.hypot((e.x+e.w/2)-cx, (e.y+e.h/2)-cy) < w.range) e.hit(w.dmg); });
+        } else {
+            let count = w.count || 1;
+            for(let i=0; i<count; i++) { let s = (Math.random()-0.5)*w.spread; entities.push(new Bullet(cx, cy, aimAngle+s, w, false)); }
+        }
+    }
+
+    hit(dmg) {
+        if(this.isGodMode) return;
+        if(this.shield>0) { this.shield-=dmg; if(this.shield<0) { this.hp+=this.shield; this.shield=0; }} else { this.hp-=dmg; }
+        cam.shake=5; 
+        spawnParticles(this.x+this.w/2, this.y+this.h/2, 10, 'red');
+    }
+
+    draw(activeMouse) {
+        if(this.hp <= 0) return;
+
+        ctx.save();
+        ctx.translate(Math.floor(this.x + this.w/2), Math.floor(this.y + this.h/2));
+        
+        let mX = activeMouse.worldX;
+        let mY = activeMouse.worldY;
+        
+        let mouseFacing;
+        if(activeMouse.isVirtual) {
+            mouseFacing = this.facing;
+        } else {
+            mouseFacing = (mX > this.x + this.w/2) ? 1 : -1;
+        }
+        
+        if (this.isGodMode) {
+            ctx.shadowBlur = 20; ctx.shadowColor = COLORS.neonGold;
+            ctx.fillStyle = '#fff'; ctx.fillRect(-15, -25, 30, 50); 
+        } else if (this.isMech) {
+            ctx.scale(mouseFacing, 1);
+            if(this.isSlamming) { ctx.fillStyle='orange'; ctx.shadowBlur=20; ctx.shadowColor='red'; } else ctx.fillStyle = '#111'; 
+            ctx.fillRect(-40, -10, 10, 30); ctx.fillStyle = '#333'; ctx.fillRect(-25, 15, 20, 30); ctx.fillStyle = '#555'; ctx.fillRect(5, 15, 20, 30); 
+            ctx.fillStyle = '#444'; ctx.fillRect(-35, -30, 70, 50); ctx.fillStyle = this.customColor; ctx.fillRect(-30, -25, 60, 40); 
+            ctx.save(); ctx.translate(10, 0); 
+            let fireX = this.x + (this.facing===1 ? 70 : 0); let fireY = this.y + 45;
+            let aimAngle = Math.atan2(mY - fireY, mX - fireX);
+            if(mouseFacing === -1) aimAngle = Math.PI - aimAngle;
+            ctx.rotate(aimAngle);
+            ctx.fillStyle = '#222'; ctx.fillRect(0, -10, 40, 20); ctx.fillStyle = WEAPONS[this.wIdx].color; ctx.fillRect(40, -5, 10, 10); 
+            ctx.restore();
+        } else {
+            ctx.scale(mouseFacing, 1);
+            ctx.fillStyle = '#222'; ctx.fillRect(-18, -10, 6, 20); ctx.fillStyle = '#333'; ctx.fillRect(-18, -10, 4, 20); 
+            ctx.fillStyle = '#1e261e'; ctx.fillRect(-10, 10, 8, 22); ctx.fillStyle = this.customColor; ctx.fillRect(2, 10, 8, 22); 
+            ctx.fillStyle = '#222'; ctx.fillRect(-14, -15, 28, 28); ctx.fillStyle = this.customColor; ctx.fillRect(-12, -12, 24, 20);
+            ctx.fillStyle = this.customColor; ctx.fillRect(-10, -34, 20, 20);
+            ctx.save(); ctx.translate(-2, -5);
+            let aimAngle;
+            if(activeMouse.isVirtual) {
+                aimAngle = 0;
+            } else {
+                aimAngle = Math.atan2(mY - (this.y+25), mX - (this.x+20));
+                if(mouseFacing === -1) aimAngle = Math.PI - aimAngle + Math.PI;
+            }
+            
+            ctx.rotate(aimAngle);
+            ctx.fillStyle = '#111'; ctx.fillRect(5, -2, 30, 8); ctx.fillStyle = WEAPONS[this.wIdx].color; ctx.fillRect(15, -1, 15, 2); 
+            ctx.restore();
+        }
+        
+        // P2 indicator
+        if(this.id === 2) {
+             ctx.fillStyle = COLORS.neonPurple;
+             ctx.font = "bold 12px monospace";
+             ctx.fillText("P2", -5, -45);
+        }
+        
+        ctx.restore();
+    }
+}
+
+class FriendlyDrone {
+    constructor(x, y) { this.x=x; this.y=y; this.fireCd=0; this.off=Math.random()*100; }
+    update() {
+        // Follow nearest living player
+        let targetP = player;
+        if(isLocalCoop && player2 && player2.hp > 0) {
+            if(player.hp <= 0 || Math.abs(player2.x - this.x) < Math.abs(player.x - this.x)) targetP = player2;
+        }
+
+        this.x += (targetP.x-30+Math.sin((timer+this.off)*0.05)*20 - this.x)*0.1;
+        this.y += (targetP.y-60+Math.cos((timer+this.off)*0.05)*10 - this.y)*0.1;
+        this.fireCd--;
+        if(this.fireCd<=0 && !timeStop) {
+            let n=null, md=600; enemies.forEach(e=>{let d=Math.hypot(e.x-this.x,e.y-this.y);if(d<md){md=d;n=e;}});
+            if(n){this.fireCd=40; entities.push(new Bullet(this.x,this.y,Math.atan2(n.y-this.y,n.x-this.x),{speed:15,dmg:10,color:COLORS.neonBlue},false));}
+        }
+    }
+    draw() { ctx.fillStyle='#fff'; ctx.fillRect(this.x-5,this.y-5,10,10); ctx.fillStyle=COLORS.neonBlue; ctx.fillRect(this.x-2,this.y-2,4,4); }
+}
+
+class HomingMissile {
+    constructor(x, y, ang) { this.type='missile'; this.x=x; this.y=y; this.vx=Math.cos(ang)*5; this.vy=Math.sin(ang)*5; this.life=200; }
+    update() {
+        if(timeStop) return; this.life--;
+        let n=null, md=1000; enemies.forEach(e=>{ if(!e.dead){ let d=Math.hypot(e.x-this.x,e.y-this.y);if(d<md){md=d;n=e;} } });
+        if(n) { let ta = Math.atan2(n.y+n.h/2 - this.y, n.x+n.w/2 - this.x); this.vx += Math.cos(ta)*1.0; this.vy += Math.sin(ta)*1.0; }
+        let s=Math.hypot(this.vx,this.vy); if(s>15){this.vx=(this.vx/s)*15;this.vy=(this.vy/s)*15;}
+        this.x+=this.vx; this.y+=this.vy; spawnParticles(this.x,this.y,1,'#ffaa00');
+    }
+    draw() { ctx.fillStyle='#ffaa00'; ctx.fillRect(this.x-5,this.y-5,10,10); }
+}
+
+class Enemy {
+    constructor(x, y, type) {
+        this.x=x; this.y=y; this.type=type; this.isBoss=(type===4);
+        this.dead = false; 
+        if(this.isBoss) {
+            let b = BOSS_DATA[Math.floor(Math.random()*BOSS_DATA.length)];
+            this.name=b.name; this.maxHp=b.hp+(kills*50); this.hp=this.maxHp; this.color=b.color; this.w=100; this.h=100;
+            document.getElementById('boss-name').innerText=this.name;
+        } else {
+            this.w=30; this.h=type===1?60:40; this.maxHp=type===1?150:50; this.hp=this.maxHp; this.color=type===1?COLORS.neonPurple:'#ff6600';
+        }
+        this.vx=0; this.vy=0; this.atk=0;
+    }
+    update() {
+        if(timeStop || this.dead) return;
+        
+        // Target nearest player
+        let targetP = player;
+        if(isLocalCoop && player2 && player2.hp > 0) {
+            if (player.hp <= 0 || (Math.abs(player2.x - this.x) < Math.abs(player.x - this.x))) {
+                targetP = player2;
+            }
+        }
+        if(targetP.hp <= 0) targetP = (targetP === player && player2) ? player2 : player; // Fallback
+
+        let dx=targetP.x-this.x, dy=targetP.y-this.y;
+        if(this.isBoss) {
+            this.x+=dx*0.02; this.y+=(dy-150)*0.05; this.atk++;
+            document.getElementById('boss-hp-fill').style.width=(Math.max(0, this.hp)/this.maxHp*100)+'%';
+            if(this.atk>60) { this.atk=0; entities.push(new Bullet(this.x+50,this.y+50,Math.atan2(dy,dx),{speed:10,dmg:20,color:this.color},true)); }
+        } else {
+            if(this.type===2) { this.x+=dx*0.02; this.y+=(dy-100)*0.02; }
+            else { 
+                this.vx=(dx>0?2:-2); this.vy+=0.6; this.x+=this.vx; this.y+=this.vy; 
+                platforms.forEach(p=>{if(this.vy>=0 && this.y+this.h<=p.y+p.h+20 && this.y+this.h>=p.y-10 && this.x+this.w>p.x && this.x<p.x+p.w){this.y=p.y-this.h; this.vy=0;}});
+            }
+        }
+        
+        // Check collision with both players
+        [player, player2].forEach(p => {
+             if(p && p.hp > 0 && this.x<p.x+p.w && this.x+this.w>p.x && this.y<p.y+p.h && this.y+this.h>p.y) p.hit(1);
+        });
+        
+        if(this.y>height+200) this.hp=0;
+    }
+    hit(d) { 
+        if(this.dead) return; this.hp -= d; spawnText(this.x, this.y-20, d, '#fff');
+        if(this.hp <= 0) {
+            this.dead = true; this.hp = 0; 
+            if(this.isBoss){
+                bossActive = false; document.getElementById('boss-hud').style.display = 'none'; score += 1000; AudioSys.explode(); showMsg("BOSS DESTRUIDO");
+            } else { kills++; score+=10; spawnParticles(this.x+this.w/2, this.y+this.h/2, 15, this.color); }
+        }
+    }
+    draw() {
+        if(this.dead) return; ctx.fillStyle=this.color; 
+        if(this.isBoss) { ctx.fillRect(this.x,this.y,this.w,this.h); } else { ctx.fillRect(this.x,this.y,this.w,this.h); ctx.fillStyle='#fff'; ctx.fillRect(this.x+5,this.y+5,this.w-10,5); }
+    }
+}
+
+class Bullet {
+    constructor(x,y,a,w,e) { this.type='bullet'; this.x=x; this.y=y; this.vx=Math.cos(a)*w.speed; this.vy=Math.sin(a)*w.speed; this.dmg=w.dmg; this.color=w.color; this.blast=w.blast; this.pierce=w.pierce; this.life=80; this.isEnemy=e; }
+    draw() { ctx.fillStyle=this.color; if(this.blast)ctx.fillRect(this.x-4,this.y-4,8,8); else ctx.fillRect(this.x-2,this.y-2,10,4); }
+}
+
+function manageChunks() {
+    let leadP = player;
+    if(player2 && player2.x > player.x) leadP = player2;
+    
+    let cd=Math.floor(leadP.x/100);
+    if(!bossActive && cd>0 && cd%500===0 && cd>distanceToBoss){spawnBoss(nextChunkX+200); distanceToBoss=cd; return;}
+    if(!bossActive){while(leadP.x+width*2>nextChunkX){generateChunk(nextChunkX); nextChunkX+=1000;}}
+    const cut=leadP.x-1500; platforms=platforms.filter(p=>p.x+p.w>cut); enemies=enemies.filter(e=>e.x>cut); entities=entities.filter(e=>e.x>cut);
+}
+function spawnBoss(x) { bossActive=true; platforms.push({x:x,y:height-150,w:1500,h:40}); enemies.push(new Enemy(x+800,height-300,4)); nextChunkX=x+1600; document.getElementById('boss-hud').style.display='block'; showMsg("⚠️ BOSS ⚠️"); }
+function generateChunk(x) {
+    let c=4+Math.floor(Math.random()*4);
+    for(let i=0;i<c;i++) {
+        let pw=150+Math.random()*300, px=x+Math.random()*(1000-pw), py=height-100-Math.random()*350;
+        platforms.push({x:px,y:py,w:pw,h:40});
+        if(Math.random()<0.6) { let ec=1+Math.floor(Math.random()*2); for(let j=0;j<ec;j++) enemies.push(new Enemy(px+Math.random()*pw,py-50,Math.random()<0.3?2:0)); }
+    }
+}
+function createExplosion(x, y, radius, dmg) {
+    spawnParticles(x, y, 30, '#ffaa00'); AudioSys.explode(); if(!isMultiplayer || isHost) cam.shake = 20;
+    enemies.forEach(en => { if(!en.dead && Math.hypot((en.x+en.w/2)-x, (en.y+en.h/2)-y) < radius) { en.hit(dmg); en.vy = -10; } });
+}
+function showMsg(t) { const m=document.getElementById('cheat-msg'); m.innerText=t; m.style.display='block'; setTimeout(()=>m.style.display='none',2000); }
+function spawnParticles(x,y,n,c) { for(let i=0;i<n;i++) entities.push({type:'spark',x:x,y:y,vx:(Math.random()-0.5)*10,vy:(Math.random()-0.5)*10,life:20,color:c}); }
+function spawnText(x,y,t,c) { entities.push({type:'text',x:x,y:y,txt:t,life:40,color:c}); }
+
+function startLocalCoop() {
+    isLocalCoop = true;
+    isMultiplayer = false;
+    initGame();
+    player2 = new Player(60); // Offset spawn
+    document.getElementById('p2-info').style.display='block';
+}
+
+function initGame() {
+    AudioSys.init(); initStars(); 
+    document.getElementById('start-screen').style.display='none'; document.getElementById('mp-menu').style.display='none';
+    document.getElementById('hud').style.display='block';
+    
+    player=new Player(); entities=[]; enemies=[]; platforms=[]; friendlyDrones=[];
+    platforms.push({x:0,y:height-100,w:1000,h:50}); nextChunkX=1000; distanceToBoss=0; bossActive=false;
+    
+    if(isMultiplayer) {
+        if(isHost) {
+            document.getElementById('mp-info').innerText = "VOCÊ É O PILOTO (P1)";
+        } else {
+            document.getElementById('mp-info').innerText = "VOCÊ É O ARTILHEIRO (P2)";
+        }
+        document.getElementById('mp-info').style.display='block';
+    }
+
+    gameState='playing'; score=0; kills=0; loop();
+}
+
+// --- CLIENT RENDER ---
+function renderClient(state) {
+    if(!clientGameStarted) {
+        clientGameStarted = true;
+        document.getElementById('mp-menu').style.display='none';
+        document.getElementById('hud').style.display='block';
+        AudioSys.init();
+    }
+
+    // CORREÇÃO TELA ROXA: Garante que bg existe ou usa fallback
+    ctx.fillStyle = (COLORS && COLORS.bg) ? COLORS.bg : '#0d1117';
+    ctx.fillRect(0,0,width,height);
+
+    let myP = state.p1;
+    if(myP) {
+        let tx=myP.x-width*0.3, ty=myP.y-height*0.6;
+        cam.x+=(tx-cam.x)*0.1; cam.y+=(ty-cam.y)*0.1;
+    }
+    
+    ctx.save();
+    ctx.translate(-cam.x, -cam.y);
+    
+    if(state.plats) {
+        state.plats.forEach(p=>{ctx.fillStyle='#0f1510';ctx.fillRect(p.x,p.y,p.w,p.h);ctx.fillStyle='#3d5c3a';ctx.fillRect(p.x,p.y,p.w,4);});
+    }
+
+    if(state.p1) drawRemotePlayer(state.p1, COLORS.armorMain);
+    
+    if(state.ens) state.ens.forEach(e => { ctx.fillStyle=e.c; ctx.fillRect(e.x,e.y,e.w,e.h); });
+    if(state.blts) state.blts.forEach(b => { ctx.fillStyle=b.c; ctx.fillRect(b.x,b.y,4,4); });
+    
+    ctx.restore();
+    
+    if(state.p1) {
+        document.getElementById('health-bar').style.width=(state.p1.hp)+'%';
+        document.getElementById('score-display').innerText=Math.floor(state.p1.x/100)+'m';
+    }
+
+    drawCrosshair(mouse.x, mouse.y, mouse.down, '#ff0055');
+}
+
+function drawRemotePlayer(p, color) {
+    ctx.save(); ctx.translate(p.x+20, p.y+32);
+    ctx.scale(p.f, 1);
+    ctx.fillStyle=color; ctx.fillRect(-12,-12,24,20);
+    ctx.fillStyle='#222'; ctx.fillRect(-14,-15,28,28); 
+    ctx.save(); ctx.translate(0, -5); ctx.rotate(0); 
+    ctx.fillStyle='#fff'; ctx.fillRect(10,0,10,4);
+    ctx.restore();
+    ctx.restore();
+}
+
+function packState() {
+    let plats = platforms.filter(p => p.x > cam.x - 100 && p.x < cam.x + width + 100).map(p=>({x:Math.floor(p.x), y:Math.floor(p.y), w:Math.floor(p.w), h:Math.floor(p.h)}));
+    let ens = enemies.map(e=>({x:Math.floor(e.x), y:Math.floor(e.y), w:e.w, h:e.h, c:e.color}));
+    let blts = entities.filter(e=>e.type==='bullet').map(b=>({x:Math.floor(b.x), y:Math.floor(b.y), c:b.color}));
+    
+    return {
+        p1: {x:Math.floor(player.x), y:Math.floor(player.y), f:player.facing, hp:player.hp},
+        plats: plats,
+        ens: ens,
+        blts: blts
+    };
+}
+
+function drawCrosshair(x, y, isClicking, color = '#00f3ff') {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, 10, 0, Math.PI*2);
+    ctx.moveTo(x - 15, y); ctx.lineTo(x + 15, y);
+    ctx.moveTo(x, y - 15); ctx.lineTo(x, y + 15);
+    ctx.stroke();
+    
+    ctx.fillStyle = isClicking ? '#fff' : color;
+    ctx.beginPath(); ctx.arc(x,y,2,0,Math.PI*2); ctx.fill();
+}
+
+function loop() {
+    if(gameState!=='playing') return;
+    requestAnimationFrame(loop);
+
+    updateGamepad();
+
+    // Se sou o Client (P2), envio meus dados e paro por aqui
+    if(isMultiplayer && !isHost) {
+        if(conn && conn.open) {
+            let worldX = mouse.x + cam.x;
+            let worldY = mouse.y + cam.y;
+            conn.send({ input: { mouse: { worldX: worldX, worldY: worldY, down: mouse.down } }});
+        }
+        return; 
+    }
+
+    if(!timeStop) timer++;
+    manageChunks();
+
+    // Camera Logic
+    let targetX, targetY;
+    if(isLocalCoop && player2 && player2.hp > 0 && player.hp > 0) {
+        targetX = (player.x + player2.x) / 2;
+        targetY = (player.y + player2.y) / 2;
+    } else if (isLocalCoop && player.hp <= 0 && player2.hp > 0) {
+        targetX = player2.x; targetY = player2.y;
+    } else {
+        targetX = player.x; targetY = player.y;
+    }
+
+    let tx=targetX-width*0.3, ty=targetY-height*0.6; 
+    cam.x+=(tx-cam.x)*0.1; cam.y+=(ty-cam.y)*0.1; cam.shake*=0.8;
+    
+    mouse.worldX=mouse.x+cam.x; mouse.worldY=mouse.y+cam.y;
+
+    ctx.fillStyle=COLORS.bg; ctx.fillRect(0,0,width,height);
+    ctx.save(); stars.forEach(s=>{let sx=(s.x-cam.x*s.v)%width;if(sx<0)sx+=width;let sy=(s.y-cam.y*s.v)%height;if(sy<0)sy+=height;ctx.fillStyle=`rgba(255,255,255,${Math.random()*0.8})`;ctx.fillRect(sx,sy,s.s,s.s)}); ctx.restore();
+
+    ctx.save(); ctx.translate(-cam.x+(Math.random()-0.5)*cam.shake, -cam.y+(Math.random()-0.5)*cam.shake);
+
+    platforms.forEach(p=>{ctx.fillStyle='#0f1510';ctx.fillRect(p.x,p.y,p.w,p.h);ctx.fillStyle='#3d5c3a';ctx.fillRect(p.x,p.y,p.w,4);});
+
+    let activeMouse = mouse;
+    let p2Active = false;
+
+    // --- CORREÇÃO DE CONTROLE DE P2 ---
+    // Se estiver em Multiplayer, o P2 assume a mira 100%. P1 (mouse) é ignorado.
+    if(isMultiplayer && isHost && conn && conn.open && p2Input.mouse) {
+        activeMouse = p2Input.mouse;
+        p2Active = true;
+    }
+
+    // UPDATE PLAYER 1
+    player.update(keys, activeMouse); 
+    player.draw(activeMouse);
+
+    // UPDATE PLAYER 2 (Local Coop)
+    if(isLocalCoop && player2) {
+        player2.update(keysP2, mouseP2);
+        player2.draw(mouseP2);
+    }
+
+    enemies.forEach(e => { e.update(); e.draw(); });
+    enemies = enemies.filter(e => !e.dead);
+
+    for(let i=entities.length-1;i>=0;i--){
+        let e=entities[i];
+        if(e.type==='bullet'){
+            if(!timeStop||!e.isEnemy){e.x+=e.vx;e.y+=e.vy;e.life--;} e.draw();
+            let hit=false;
+            // Hit P1
+            if(e.isEnemy && player.hp>0 && e.x>player.x && e.x<player.x+player.w && e.y>player.y && e.y<player.y+player.h){player.hit(e.dmg);hit=true;}
+            // Hit P2
+            if(e.isEnemy && isLocalCoop && player2.hp>0 && e.x>player2.x && e.x<player2.x+player2.w && e.y>player2.y && e.y<player2.y+player2.h){player2.hit(e.dmg);hit=true;}
+            
+            if(!e.isEnemy){
+                for(let j=0; j<enemies.length; j++){
+                    let en=enemies[j]; if(en.dead) continue;
+                    if(e.x>en.x&&e.x<en.x+en.w&&e.y>en.y&&e.y<en.y+en.h){
+                        en.hit(e.dmg); hit=true; if(e.blast) createExplosion(e.x, e.y, e.blast, e.dmg/2); if(!e.pierce)break;
+                    }
+                }
+            }
+            platforms.forEach(p=>{if(e.x>p.x&&e.x<p.x+p.w&&e.y>p.y&&e.y<p.y+p.h)hit=true}); if(hit||e.life<=0)entities.splice(i,1);
+        }
+        else if(e.type==='missile'){
+            e.update(); e.draw(); let mHit = false;
+            enemies.forEach(en => { if(!en.dead && Math.hypot((en.x+en.w/2)-e.x, (en.y+en.h/2)-e.y) < 50) { createExplosion(e.x, e.y, 150, 100); mHit=true; }});
+            platforms.forEach(p=>{ if(e.x>p.x && e.x<p.x+p.w && e.y>p.y && e.y<p.y+p.h){ createExplosion(e.x, e.y, 150, 100); mHit=true; } });
+            if(mHit||e.life<=0)entities.splice(i,1);
+        }
+        else if(e.type==='flame') {
+            e.x+=e.vx; e.y+=e.vy; e.life--; ctx.fillStyle=`rgba(255, ${Math.random()*200}, 0, 0.8)`; ctx.fillRect(e.x,e.y,8,8);
+            enemies.forEach(en=>{if(!en.dead && e.x>en.x && e.x<en.x+en.w && e.y>en.y && e.y<en.y+en.h) { en.hit(5); e.life=0; }});
+            if(e.life<=0) entities.splice(i,1);
+        }
+        else if(e.type==='spark'){e.x+=e.vx;e.y+=e.vy;e.life--;ctx.fillStyle=e.color;ctx.fillRect(e.x,e.y,3,3);if(e.life<=0)entities.splice(i,1);}
+        else if(e.type==='text'){e.y-=1;e.life--;ctx.fillStyle=e.color;ctx.font='bold 16px Courier New';ctx.fillText(e.txt,e.x,e.y);if(e.life<=0)entities.splice(i,1);}
+        else if(e.type==='slash'){e.life--;ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.ang);ctx.fillStyle=e.color;ctx.fillRect(0,-2,e.range,4);ctx.restore();if(e.life<=0)entities.splice(i,1);}
+        else if(e.type==='lightning'){e.life--;ctx.shadowBlur=20;ctx.shadowColor=COLORS.neonBlue;ctx.strokeStyle='#fff';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(e.x,0);ctx.lineTo(e.x,e.targetY);ctx.stroke();ctx.shadowBlur=0;if(e.life<=0)entities.splice(i,1);}
+        else if(e.type==='blackhole'){e.life--;ctx.fillStyle='#000';ctx.strokeStyle='#fff';ctx.beginPath();ctx.arc(e.x,e.y,30,0,Math.PI*2);ctx.fill();ctx.stroke();enemies.forEach(en=>{if(!en.dead){let d=Math.hypot(en.x-e.x,en.y-e.y);if(d<400){en.x+=(e.x-en.x)*0.1;en.y+=(e.y-en.y)*0.1;if(d<30)en.hit(10)}}});if(e.life<=0)entities.splice(i,1);}
+        else if(e.type==='shockwave'){e.radius+=15;e.life--;ctx.strokeStyle='#fff';ctx.lineWidth=5;ctx.beginPath();ctx.arc(e.x,e.y,e.radius,0,Math.PI*2);ctx.stroke();if(e.radius>e.maxRadius)entities.splice(i,1);}
+    }
+    
+    // Draw Crosshairs
+    if(player.hp > 0) {
+        if(p2Active) drawCrosshair(activeMouse.worldX, activeMouse.worldY, activeMouse.down, '#ff0055');
+        else drawCrosshair(mouse.worldX, mouse.worldY, mouse.down, '#00f3ff');
+    }
+    
+    if(isLocalCoop && player2 && player2.hp > 0) {
+         // P2 Crosshair (Different color)
+         // Only draw if not using keyboard auto-aim or if needed
+         if(!mouseP2.isVirtual) drawCrosshair(mouseP2.worldX, mouseP2.worldY, mouseP2.down, '#bc13fe');
+    }
+
+    ctx.restore();
+
+    // UI Updates (Keeps track of Player 1 mainly for simplicity, P2 relies on visual cues)
+    if(player.hp > 0) {
+        document.getElementById('shield-bar').style.width=Math.min(100,(player.shield/player.maxShield)*100)+'%';
+        document.getElementById('health-bar').style.width=Math.min(100,(player.hp/player.maxHp)*100)+'%';
+        document.getElementById('fuel-bar').style.width=Math.min(100,(player.fuel/player.maxFuel)*100)+'%';
+    } else if (isLocalCoop && player2 && player2.hp > 0) {
+        // Swap UI to P2 if P1 dead? Keep simple for now.
+        document.getElementById('health-bar').style.width='0%';
+    }
+    
+    score=Math.floor(player.x/100); 
+    document.getElementById('score-display').innerText=score+'m';
+    document.getElementById('kills-display').innerText='KILLS: '+kills;
+
+    if(isMultiplayer && isHost && conn && conn.open) {
+        conn.send({ state: packState() });
+    }
+
+    // GAME OVER LOGIC (Both must die in Co-op)
+    let gameOver = false;
+    if(isLocalCoop) {
+        if(player.hp <= 0 && player2.hp <= 0) gameOver = true;
+    } else {
+        if(player.hp <= 0) gameOver = true;
+    }
+
+    if(gameOver){
+        gameState='gameover'; document.getElementById('hud').style.display='none'; document.getElementById('game-over').style.display='flex';
+        document.getElementById('final-score').innerText=`DISTÂNCIA: ${score}m | ABATES: ${kills}`;
+    }
+}
+</script>
+</body>
+</html>
